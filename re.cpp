@@ -53,15 +53,9 @@ void load_Data(const string &file, vector<vector<double> > &features,
 void calculate_cum(const vector<vector<double> > &features,
                    vector<vector<pair<double, double> > > &cum) {
     vector<pair<double, double> > temp_line;
-    temp_line.resize(features[0].size(), make_pair(0., 0.));
+    temp_line.resize(features[0].size() + 1, make_pair(0., 0.));
     cum.resize(features.size(), temp_line);
-    // for (int j = 0; j < features[0].size(); ++ j) {
-    //     temp_line.push_back(make_pair(0., 0.));
-    // }
-    // for (int i = 0; i < features.size(); ++ i) {
-    //     cum.push_back(temp_line);
-    // }
-    // cout << cum[0].size() << endl;
+
     for (int i = 0; i < features.size(); ++ i) {
         for (int j = 1; j <= features[0].size(); ++ j) {
             cum[i][j].first = cum[i][j - 1].first + features[i][j - 1];
@@ -69,7 +63,8 @@ void calculate_cum(const vector<vector<double> > &features,
                                + features[i][j - 1] * features[i][j - 1];
         }
     }
-    // cout << cum[0].size() << endl;
+
+    return;
 }
 
 /*
@@ -104,6 +99,8 @@ void make_grid(int left, int right, int down, int up, int m,
         if (wl >= 10) wl_list.push_back(wl);
     }
     wl_list.erase(unique(wl_list.begin(), wl_list.end()), wl_list.end());
+    
+    return;
 }
 
 void indicating(const vector<vector<double> > &featrue, const int &wd,
@@ -113,12 +110,6 @@ void indicating(const vector<vector<double> > &featrue, const int &wd,
     vector<bool> temp;
     temp.resize(symbolic_size);
     indicating_array.resize(featrue.size(), temp);
-    // for (int i = 0; i < symbolic_size; ++ i) {
-    //     temp.push_back(false);
-    // }
-    // for (int i = 0; i < featrue.size(); ++ i) {
-    //     indicating_array.push_back(temp);
-    // }
     
     for (int i = 0; i < featrue.size(); ++ i) {
         for (int j = 0; j < featrue[0].size() - wl + 1; ++ j) {
@@ -145,21 +136,28 @@ void indicating(const vector<vector<double> > &featrue, const int &wd,
             indicating_array[i][val] = true;
         }
     }
+
+    return;
 }
 
 void find_candidates(const vector<vector<bool> > &indicating_array,
                      vector<int> &candidates, const int &symbolic_size,
                      const int &select_low, const int &select_high) {
+    //  Count the number of occurrences of patterns
     vector<int> pattern_count(symbolic_size, 0);
     for (int i = 0; i < indicating_array.size(); ++ i) {
         for (int j = 0; j < symbolic_size; ++ j) {
             if (indicating_array[i][j]) ++ pattern_count[j];
         }
     }
+
+    // Filter patterns that meet the requirements for the number of occurrences
     for (int i = 0; i < symbolic_size; ++ i) {
         if (pattern_count[i] > select_low && pattern_count[i] < select_high)
             candidates.push_back(i);
     }
+
+    return;
 }
 
 void build_SPT(const vector<vector<bool> > &indicating_array, vector<int> &candidates,
@@ -167,28 +165,39 @@ void build_SPT(const vector<vector<bool> > &indicating_array, vector<int> &candi
     // Randomly rearrange candidates
     // select the pre-label_size as the classification feature
     shuffle(candidates.begin(), candidates.end(), default_random_engine(time(NULL)));
+
     vector<int> predict(n, -1);
+
     for (int i = 0; i < label_size - 1; ++ i) {
         int true_count = 0;
         for (int j = 0; j < n; ++ j) {
             if (indicating_array[j][candidates[i]]) ++ true_count;
         }
         if ((true_count << 1) <= n) {
+            // When the number of trueist is less than false, 
+            // the time series that contains the pattern is marked as the current classification. 
+            // The rest is reserved for the next classification.
             for (int j = 0; j < n; ++ j) {
                 if (indicating_array[j][candidates[i]] && predict[j] == -1)
                     predict[j] = i;
             }
         } else {
+            // Conversely, the time series that does not contain the pattern 
+            // is marked as the current classification.
             for (int j = 0; j < n; ++ j) {
                 if (!indicating_array[j][candidates[i]] && predict[j] == -1)
                     predict[j] = i;
             }
         }
     }
+    // The remaining time series is all categorized to the last category.
     for (int j = 0; j < n; ++ j) {
         if (predict[j] == -1) predict[j] = label_size - 1;
     }
+
     subclusters.push_back(predict);
+    
+    return;
 }
 
 void ensemble2graph(vector<vector<int> > &subclusters, const int &label_size,
@@ -226,6 +235,8 @@ void ensemble2graph(vector<vector<int> > &subclusters, const int &label_size,
             xadj.push_back(adjncy.size());
         }
     }
+
+    return;
 }
 
 vector<vector<int> > get_subclusters(const vector<vector<double> > &features, 
@@ -234,7 +245,6 @@ vector<vector<int> > get_subclusters(const vector<vector<double> > &features,
                                      const int &symbolic_size, const int &label_size,
                                      vector<vector<pair<double, double> > > &cum) {
     // indicating_array[i][j] indicates whether the ith time series contains the jth symbol pattern
-    
     vector<vector<bool> > indicating_array;
     indicating(features, wd, wl, symbolic_size, cum, indicating_array);
 
@@ -250,6 +260,7 @@ vector<vector<int> > get_subclusters(const vector<vector<double> > &features,
     vector<vector<int> > res;
     if (candidates.size() < label_size) return res;
 
+    // Build ensemble_size tree
     for (int k = 0; k < ensemble_size; ++ k) {
         build_SPT(indicating_array, candidates, res, n, label_size);
     }
@@ -266,14 +277,22 @@ vector<int> get_parts(vector<vector<int> > &clusters, const int &label_size,
     // xadj and adjncy store the graph using the compressed storage format (CSR)
     // partvec stores the partition vector of the graph.
     vector<idx_t> xadj, adjncy, part(nvtxs, 0);
+
+    // Turning forests into graphs
     ensemble2graph(clusters, label_size, xadj, adjncy);
-    int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
-                                           &nparts, 0, 0, 0, &objval, part.data());
-    if (flag != METIS_OK) {
-        cout << "Some problems have occurred when the diagram was divided." << endl;
-    }
+
     vector<int> res(n, 0);
+
+    // Divide the graph using the metis component
+    int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 
+                                   0, 0, 0, &nparts, 0, 0, 0, &objval, part.data());
+    if (flag != METIS_OK) {
+        cout << "Fail to divide the graph." << endl;
+        return res;
+    }
+
     copy(part.begin(), part.begin() + n, res.begin());
+
     return res;
 }
 
@@ -300,7 +319,7 @@ int main(int argc, char *argv[]) {
     const int ensemble_size = atoi(argv[2]);
     //    string Dataset; int ensemble_size;
     //    cin >> Dataset >> ensemble_size;
-    // string Dataset = "ChlorineConcentration";
+    // string Dataset = "ElectricDevices";
     // int ensemble_size = 100;
     cout << "Dataset: " << Dataset << ", ensemble size: " << ensemble_size << endl;
     
@@ -308,7 +327,7 @@ int main(int argc, char *argv[]) {
     string test_file = "./" + Dataset + "/" + Dataset + "_TEST";
     
     // Because it's clustering, we don't need Data for training
-
+    // Train varaibles contain both training and testing data from the UCR datasets
     load_Data(train_file, Data::features, Data::labels);
     load_Data(test_file, Data::features, Data::labels);
 
@@ -339,23 +358,12 @@ int main(int argc, char *argv[]) {
 
     // Calculate the cumulative sum series and cumulative squared sum series
     // The first value is sigma(t_i) and the second is sigma(t_i^2)
-    
     calculate_cum(Data::features, Data::cum);
-    // cout << cum[0].size() << endl;
 
     // wd is the collection of w (the number of segments)
     // wl is the collection of l (subsequence length)
     vector<int> wd_list, wl_list;
     make_grid(3, 8, 0, 40, m, wd_list, wl_list);
-    
-
-    // Algorithm::nvtxs = n + ensemble_size * label_size;
-    // Algorithm::nparts = label_size;
-
-    // Algorithm::partvec.resize(n, 0);
-    // Algorithm::clusters.clear();
-    
-    // vector<int> partvec(n, 0);
 
     for (int i = 0; i < wd_list.size(); ++ i) {
         int wd = wd_list[i];
@@ -363,81 +371,19 @@ int main(int argc, char *argv[]) {
 
         for (int j = 0; j < wl_list.size(); ++ j) {
             int wl = wl_list[j];
-            // // indicating_array.clear();
-            // indicating(Data::features, wd, wl, symbolic_size, Data::cum, Algorithm::indicating_array);
-            // // candidates.clear();
-            // find_candidates(Algorithm::indicating_array, Algorithm::candidates, 
-            //                 symbolic_size, select_low, select_high);
-            // // cout << i << " " << j << endl;
-            // if (Algorithm::candidates.size() < label_size) {
-            //     // Ignore this grid when the symbol pattern used is less than the number of classes
-            //     continue;
-            // }
-            
-            // // Build ensemble_size trees for prediction
-            // Algorithm::subclusters.clear();
-            // for (int k = 0; k < ensemble_size; ++ k) {
-            //     build_SPT(Algorithm::indicating_array, Algorithm::candidates, 
-            //               Algorithm::subclusters, n, label_size);
-            // }
+
             Algorithm::subclusters = get_subclusters(Data::features, n, ensemble_size,
                                     wd, wl, symbolic_size, label_size, Data::cum);
             if (Algorithm::subclusters.size() == 0) continue;
-            // Turn the forest into graphs
-            // Algorithm::xadj.clear(); 
-            // Algorithm::adjncy.clear();
-            // ensemble2graph(Algorithm::subclusters, label_size, Algorithm::xadj, Algorithm::adjncy);
-            
-            // // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
-            // // copy(xadj.begin(), xadj.end(), xadjarr);
-            // // copy(adjncy.begin(), adjncy.end(), adjncyarr);
-            // // idx_t nparts = label_size, objval = 0, part[nvtxs];
-            
-            // Algorithm::part.resize(nvtxs, 0);
 
-            // int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
-            //                                &nparts, 0, 0, 0, &objval, part.data());
-            // if (flag != METIS_OK) {
-            //     cout << "Some problems have occurred when the diagram was divided." << endl;
-            //     cout << "i is " << i << "and j is" << j << endl;
-            //     continue;
-            // }
-
-            // copy(part.begin(), part.begin() + n, partvec.begin());
-            // // for (int i = 0; i < n; ++ i) {
-            // //     partvec.push_back((int)part[i]);
-            // // }
-            // partvec = get_parts(Algorithm::subclusters, label_size, n);
             Algorithm::partvec = get_parts(Algorithm::subclusters, label_size, n);
             Algorithm::clusters.push_back(Algorithm::partvec);
         }
     }
-    
+
     // Collect clusters and do final ensemble
-    // xadj.clear(); adjncy.clear();
-    // ensemble2graph(clusters, label_size, xadj, adjncy);
-    
-    // nvtxs = n + clusters.size() * label_size;
-    
-    // // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
-    // // copy(xadj.begin(), xadj.end(), xadjarr);
-    // // copy(adjncy.begin(), adjncy.end(), adjncyarr);
-    // // idx_t nparts = label_size, objval = 0, part[nvtxs];
-    
-    // int flag = METIS_PartGraphKway(&Algorithm::nvtxs, &Algorithm::ncon, Algorithm::xadj.data(), 
-    //                                Algorithm::adjncy.data(), 0, 0, 0, &Algorithm::nparts, 0, 0, 
-    //                                0, &Algorithm::objval, Algorithm::part.data());
-    // if (flag != METIS_OK) {
-    //     cout << "Some problems have occurred in final ensemble." << endl;
-    // }
-
-    // // partvec.resize(n, 0);
-    // // for (int i = 0; i < n; ++ i) {
-    // //     partvec.push_back((int)part[i]);
-    // // }
-    // copy(part.begin(), part.begin() + n, partvec.begin());
-
     Algorithm::partvec = get_parts(Algorithm::clusters, label_size, n);
+
     clock_t end_time = clock();
     
     // Calculating the Rand Index
