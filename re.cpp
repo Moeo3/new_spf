@@ -15,15 +15,19 @@ const double eexp = 1e-8;
 
 namespace Data {
     vector<vector<double> > features;
-    vector<vector<pair<double, double> > > cum;
-
     vector<double> labels;
+
+    // cum stores cumulative sum series and cumulative squared sum series
+    // The first value is sigma(t_i) and the second is sigma(t_i^2)
+    vector<vector<pair<double, double> > > cum;
 }
 
 namespace Algorithm {
 
-    // clusters stores clustering results on each grid
+    // partvec is the result of the division
     vector<int> partvec;
+
+    // clusters stores clustering results
     vector<vector<int> > subclusters, clusters;
 
 }
@@ -31,9 +35,9 @@ namespace Algorithm {
 void load_Data(const string &file, vector<vector<double> > &features, 
                 vector<double> &labels) {
     ifstream in_file(file, ios::in);
+
     string temp_line;
     // Line-by-line read
-    // getline(in_file, temp_line);
     while (getline(in_file, temp_line)) {
         istringstream iss(temp_line);
         string temp_str;
@@ -48,6 +52,8 @@ void load_Data(const string &file, vector<vector<double> > &features,
         }
         features.push_back(values);
     }
+
+    return;
 }
 
 void calculate_cum(const vector<vector<double> > &features,
@@ -357,7 +363,6 @@ int main(int argc, char *argv[]) {
     int m = Data::features[0].size();
 
     // Calculate the cumulative sum series and cumulative squared sum series
-    // The first value is sigma(t_i) and the second is sigma(t_i^2)
     calculate_cum(Data::features, Data::cum);
 
     // wd is the collection of w (the number of segments)
