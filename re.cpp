@@ -14,11 +14,18 @@ const double p_rate = 0.25;
 const double eexp = 1e-8;
 
 namespace Data {
-
     vector<vector<double> > features;
     vector<vector<pair<double, double> > > cum;
 
     vector<double> labels;
+}
+
+namespace Algorithm {
+
+    // clusters stores clustering results on each grid
+    vector<int> partvec;
+    vector<vector<int> > subclusters, clusters;
+
 }
 
 void load_Data(const string &file, vector<vector<double> > &features, 
@@ -221,6 +228,55 @@ void ensemble2graph(vector<vector<int> > &subclusters, const int &label_size,
     }
 }
 
+vector<vector<int> > get_subclusters(const vector<vector<double> > &features, 
+                                     const int &n, const int &ensemble_size, 
+                                     const int &wd, const int &wl,
+                                     const int &symbolic_size, const int &label_size,
+                                     vector<vector<pair<double, double> > > &cum) {
+    // indicating_array[i][j] indicates whether the ith time series contains the jth symbol pattern
+    
+    vector<vector<bool> > indicating_array;
+    indicating(features, wd, wl, symbolic_size, cum, indicating_array);
+
+    // The upper and lower bounds of the count of symbol patterns that can be selected as features
+    const double select_low = n * p_rate / label_size;
+    const double select_high = n * (1 - p_rate / label_size);
+
+    // candidates is a collection of selected symbol patterns
+    vector<int> candidates;
+    find_candidates(indicating_array, candidates, 
+                    symbolic_size, select_low, select_high);
+    
+    vector<vector<int> > res;
+    if (candidates.size() < label_size) return res;
+
+    for (int k = 0; k < ensemble_size; ++ k) {
+        build_SPT(indicating_array, candidates, res, n, label_size);
+    }
+
+    return res;
+}
+
+vector<int> get_parts(vector<vector<int> > &clusters, const int &label_size,
+                      const int &n) {
+    // nvtxs is the number of vertices in the graph (equals to xadj.size() + 1)
+    // ncon is the number of balancing constraints 
+    idx_t nvtxs = n + clusters.size() * label_size,
+          ncon = 1, nparts = label_size, objval = 0;
+    // xadj and adjncy store the graph using the compressed storage format (CSR)
+    // partvec stores the partition vector of the graph.
+    vector<idx_t> xadj, adjncy, part(nvtxs, 0);
+    ensemble2graph(clusters, label_size, xadj, adjncy);
+    int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
+                                           &nparts, 0, 0, 0, &objval, part.data());
+    if (flag != METIS_OK) {
+        cout << "Some problems have occurred when the diagram was divided." << endl;
+    }
+    vector<int> res(n, 0);
+    copy(part.begin(), part.begin() + n, res.begin());
+    return res;
+}
+
 double rand_index(const vector<int> &predict, const vector<double> &real) {
     int n = predict.size();
     int tp = 0, fp = 0, tn = 0, fn = 0;
@@ -244,7 +300,7 @@ int main(int argc, char *argv[]) {
     // const int ensemble_size = atoi(argv[2]);
     //    string Dataset; int ensemble_size;
     //    cin >> Dataset >> ensemble_size;
-    string Dataset = "ChlorineConcentration";
+    string Dataset = "FaceFour";
     int ensemble_size = 100;
     cout << "Dataset: " << Dataset << ", ensemble size: " << ensemble_size << endl;
     
@@ -291,107 +347,100 @@ int main(int argc, char *argv[]) {
     vector<int> wd_list, wl_list;
     make_grid(3, 8, 0, 40, m, wd_list, wl_list);
     
-    // The upper and lower bounds of the count of symbol patterns that can be selected as features
-    double select_low = n * p_rate / label_size;
-    double select_high = n * (1 - p_rate / label_size);
 
-    // indicating_array[i][j] indicates whether the ith time series contains the jth symbol pattern
-    // candidates is a collection of selected symbol patterns
-    vector<vector<bool> > indicating_array;
-    vector<int> candidates;
-    vector<vector<int> > subclusters;
+    // Algorithm::nvtxs = n + ensemble_size * label_size;
+    // Algorithm::nparts = label_size;
 
-    // xadj and adjncy store the graph using the compressed storage format (CSR)
-    // partvec stores the partition vector of the graph.
-    vector<idx_t> xadj, adjncy, part;
-
-    // clusters stores clustering results on each grid
-    vector<int> partvec(n, 0);
-    vector<vector<int> > clusters;
-
-    // nvtxs is the number of vertices in the graph (equals to xadj.size() + 1)
-    // ncon is the number of balancing constraints 
-    idx_t nvtxs = n + ensemble_size * label_size, ncon = 1;
-    idx_t nparts = label_size, objval = 0;
+    // Algorithm::partvec.resize(n, 0);
+    // Algorithm::clusters.clear();
     
+    // vector<int> partvec(n, 0);
+
     for (int i = 0; i < wd_list.size(); ++ i) {
         int wd = wd_list[i];
         int symbolic_size = 1 << (wd << 1);
 
         for (int j = 0; j < wl_list.size(); ++ j) {
             int wl = wl_list[j];
-            // indicating_array.clear();
-            indicating(Data::features, wd, wl, symbolic_size, Data::cum, indicating_array);
-            // candidates.clear();
-            find_candidates(indicating_array, candidates, symbolic_size, select_low, select_high);
-            // cout << i << " " << j << endl;
-            if (candidates.size() < label_size) {
-                // Ignore this grid when the symbol pattern used is less than the number of classes
-                continue;
-            }
-            
-            // Build ensemble_size trees for prediction
-            subclusters.clear();
-            for (int k = 0; k < ensemble_size; ++ k) {
-                build_SPT(indicating_array, candidates, subclusters, n, label_size);
-            }
-            
-            // Turn the forest into graphs
-            xadj.clear(); adjncy.clear();
-            ensemble2graph(subclusters, label_size, xadj, adjncy);
-            
-            
-
-            // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
-            // copy(xadj.begin(), xadj.end(), xadjarr);
-            // copy(adjncy.begin(), adjncy.end(), adjncyarr);
-            // idx_t nparts = label_size, objval = 0, part[nvtxs];
-            
-            part.resize(nvtxs, 0);
-
-            int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
-                                           &nparts, 0, 0, 0, &objval, part.data());
-            if (flag != METIS_OK) {
-                cout << "Some problems have occurred when the diagram was divided." << endl;
-                cout << "i is " << i << "and j is" << j << endl;
-                continue;
-            }
-
-            copy(part.begin(), part.begin() + n, partvec.begin());
-            // for (int i = 0; i < n; ++ i) {
-            //     partvec.push_back((int)part[i]);
+            // // indicating_array.clear();
+            // indicating(Data::features, wd, wl, symbolic_size, Data::cum, Algorithm::indicating_array);
+            // // candidates.clear();
+            // find_candidates(Algorithm::indicating_array, Algorithm::candidates, 
+            //                 symbolic_size, select_low, select_high);
+            // // cout << i << " " << j << endl;
+            // if (Algorithm::candidates.size() < label_size) {
+            //     // Ignore this grid when the symbol pattern used is less than the number of classes
+            //     continue;
             // }
-            clusters.push_back(partvec);
+            
+            // // Build ensemble_size trees for prediction
+            // Algorithm::subclusters.clear();
+            // for (int k = 0; k < ensemble_size; ++ k) {
+            //     build_SPT(Algorithm::indicating_array, Algorithm::candidates, 
+            //               Algorithm::subclusters, n, label_size);
+            // }
+            Algorithm::subclusters = get_subclusters(Data::features, n, ensemble_size,
+                                    wd, wl, symbolic_size, label_size, Data::cum);
+            if (Algorithm::subclusters.size() == 0) continue;
+            // Turn the forest into graphs
+            // Algorithm::xadj.clear(); 
+            // Algorithm::adjncy.clear();
+            // ensemble2graph(Algorithm::subclusters, label_size, Algorithm::xadj, Algorithm::adjncy);
+            
+            // // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
+            // // copy(xadj.begin(), xadj.end(), xadjarr);
+            // // copy(adjncy.begin(), adjncy.end(), adjncyarr);
+            // // idx_t nparts = label_size, objval = 0, part[nvtxs];
+            
+            // Algorithm::part.resize(nvtxs, 0);
+
+            // int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
+            //                                &nparts, 0, 0, 0, &objval, part.data());
+            // if (flag != METIS_OK) {
+            //     cout << "Some problems have occurred when the diagram was divided." << endl;
+            //     cout << "i is " << i << "and j is" << j << endl;
+            //     continue;
+            // }
+
+            // copy(part.begin(), part.begin() + n, partvec.begin());
+            // // for (int i = 0; i < n; ++ i) {
+            // //     partvec.push_back((int)part[i]);
+            // // }
+            // partvec = get_parts(Algorithm::subclusters, label_size, n);
+            Algorithm::partvec = get_parts(Algorithm::subclusters, label_size, n);
+            Algorithm::clusters.push_back(Algorithm::partvec);
         }
     }
     
     // Collect clusters and do final ensemble
-    xadj.clear(); adjncy.clear();
-    ensemble2graph(clusters, label_size, xadj, adjncy);
+    // xadj.clear(); adjncy.clear();
+    // ensemble2graph(clusters, label_size, xadj, adjncy);
     
-    nvtxs = n + clusters.size() * label_size;
+    // nvtxs = n + clusters.size() * label_size;
     
-    // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
-    // copy(xadj.begin(), xadj.end(), xadjarr);
-    // copy(adjncy.begin(), adjncy.end(), adjncyarr);
-    // idx_t nparts = label_size, objval = 0, part[nvtxs];
+    // // idx_t xadjarr[xadj.size()], adjncyarr[adjncy.size()];
+    // // copy(xadj.begin(), xadj.end(), xadjarr);
+    // // copy(adjncy.begin(), adjncy.end(), adjncyarr);
+    // // idx_t nparts = label_size, objval = 0, part[nvtxs];
     
-    int flag = METIS_PartGraphKway(&nvtxs, &ncon, xadj.data(), adjncy.data(), 0, 0, 0,
-                                   &nparts, 0, 0, 0, &objval, part.data());
-    if (flag != METIS_OK) {
-        cout << "Some problems have occurred in final ensemble." << endl;
-    }
-
-    // partvec.resize(n, 0);
-    // for (int i = 0; i < n; ++ i) {
-    //     partvec.push_back((int)part[i]);
+    // int flag = METIS_PartGraphKway(&Algorithm::nvtxs, &Algorithm::ncon, Algorithm::xadj.data(), 
+    //                                Algorithm::adjncy.data(), 0, 0, 0, &Algorithm::nparts, 0, 0, 
+    //                                0, &Algorithm::objval, Algorithm::part.data());
+    // if (flag != METIS_OK) {
+    //     cout << "Some problems have occurred in final ensemble." << endl;
     // }
-    copy(part.begin(), part.begin() + n, partvec.begin());
 
+    // // partvec.resize(n, 0);
+    // // for (int i = 0; i < n; ++ i) {
+    // //     partvec.push_back((int)part[i]);
+    // // }
+    // copy(part.begin(), part.begin() + n, partvec.begin());
+
+    Algorithm::partvec = get_parts(Algorithm::clusters, label_size, n);
     clock_t end_time = clock();
     
     // Calculating the Rand Index
-    double rand_idx = rand_index(partvec, Data::labels);
+    double rand_idx = rand_index(Algorithm::partvec, Data::labels);
     cout << "rand index: " << rand_idx << endl;
     cout << "The running time is: " << fixed << (double)(end_time - start_time) / CLOCKS_PER_SEC << "seconds" << endl;
     
