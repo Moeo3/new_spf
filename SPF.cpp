@@ -380,9 +380,9 @@ double randIndex(const double* trainLabel, const idx_t* part2, int m) {
 
 int main(int argc, char *argv[]) {
 
-	string dataset = "ChlorineConcentration"; int en_num = 100;
-	// string dataset = string(argv[1]);
-	// const int en_num = atoi(argv[2]);
+	// string dataset = "ChlorineConcentration"; int en_num = 100;
+	string dataset = string(argv[1]);
+	const int en_num = atoi(argv[2]);
 
 	//string path = "./UCR_TS_Archive_2015/";
 	//string path2 = "./UCR_TS_Archive_2015/";

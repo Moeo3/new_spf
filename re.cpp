@@ -296,16 +296,16 @@ double rand_index(const vector<int> &predict, const vector<double> &real) {
 
 
 int main(int argc, char *argv[]) {
-    // string Dataset = string(argv[1]);
-    // const int ensemble_size = atoi(argv[2]);
+    string Dataset = string(argv[1]);
+    const int ensemble_size = atoi(argv[2]);
     //    string Dataset; int ensemble_size;
     //    cin >> Dataset >> ensemble_size;
-    string Dataset = "FaceFour";
-    int ensemble_size = 100;
+    // string Dataset = "ChlorineConcentration";
+    // int ensemble_size = 100;
     cout << "Dataset: " << Dataset << ", ensemble size: " << ensemble_size << endl;
     
-    string train_file = "./spf-/" + Dataset + "/" + Dataset + "_TRAIN";
-    string test_file = "./spf-/" + Dataset + "/" + Dataset + "_TEST";
+    string train_file = "./" + Dataset + "/" + Dataset + "_TRAIN";
+    string test_file = "./" + Dataset + "/" + Dataset + "_TEST";
     
     // Because it's clustering, we don't need Data for training
 
@@ -342,6 +342,7 @@ int main(int argc, char *argv[]) {
     
     calculate_cum(Data::features, Data::cum);
     // cout << cum[0].size() << endl;
+
     // wd is the collection of w (the number of segments)
     // wl is the collection of l (subsequence length)
     vector<int> wd_list, wl_list;
