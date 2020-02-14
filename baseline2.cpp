@@ -32,6 +32,25 @@ namespace Algorithm {
 
 }
 
+vector<vector<double> > breakpoints = {
+    {-0.43, 0.43},
+    {-0.67, 0, 0.67},
+    {-0.84, -0.25, 0.25, 0.84},
+    {-0.97, -0.43, 0, 0.43, 0.97},
+    {-1.07, -0.57, -0.18, 0.18, 0.57, 1.07},
+    {-1.15, -0.67, -0.32, 0, 0.32, 0.67, 1.15},
+    {-1.22, -0.76, -0.43, -0.14, 0.14, 0.43, 0.76, 1.22},
+    {-1.28, -0.84, -0.52, -0.25, 0, 0.25, 0.52, 0.84, 1.28}
+};
+
+int get_bitval(const double &paa, const int &arbitrary) {
+    int pos = arbitrary - 3;
+    for (int i = 0; i < arbitrary - 1; ++ i) {
+        if (paa < breakpoints[pos][i]) return i;
+    }
+    return arbitrary - 1;
+}
+
 void load_data(const string &file, vector<vector<double> > &features, 
                 vector<double> &labels) {
     ifstream in_file(file, ios::in);
@@ -135,8 +154,9 @@ void indicating(const vector<vector<double> > &featrue, const int &wd,
                 double sumy = cum[i][j + ry].first - cum[i][j + ly].first;
                 double meany = sumy / (ry - ly);
                 double paa = (meany - meanx) / sigmax;
-                int bit_val = (paa < 0.) ? 
-                              ( (paa < -0.67) ? 0 : 1 ) : ( (paa < 0.67) ? 2 : 3 );
+                int bit_val = get_bitval(paa, 4);
+                // int bit_val = (paa < 0.) ? 
+                //               ( (paa < -0.67) ? 0 : 1 ) : ( (paa < 0.67) ? 2 : 3 );
                 val += (1 << (k << 1)) * bit_val;
                 // ly = ry;
                 // ry += length;
@@ -325,16 +345,16 @@ double rand_index(const vector<int> &predict, const vector<double> &real) {
 
 
 int main(int argc, char *argv[]) {
-    string dataset = string(argv[1]);
-    const int ensemble_size = atoi(argv[2]);
+    // string dataset = string(argv[1]);
+    // const int ensemble_size = atoi(argv[2]);
     //    string dataset; int ensemble_size;
     //    cin >> dataset >> ensemble_size;
-    // string dataset = "ElectricDevices";
-    // int ensemble_size = 100;
+    string dataset = "FaceFour";
+    int ensemble_size = 100;
     cout << "dataset: " << dataset << ", ensemble size: " << ensemble_size << endl;
     
-    string train_file = "./" + dataset + "/" + dataset + "_TRAIN";
-    string test_file = "./" + dataset + "/" + dataset + "_TEST";
+    string train_file = "./spf-/" + dataset + "/" + dataset + "_TRAIN";
+    string test_file = "./spf-/" + dataset + "/" + dataset + "_TEST";
     
     // Because it's clustering, we don't need Data for training
     // Train varaibles contain both training and testing data from the UCR datasets
