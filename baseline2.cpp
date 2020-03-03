@@ -131,7 +131,7 @@ void make_grid(int left, int right, int down, int up, int m,
 }
 
 void indicating(const vector<vector<double> > &featrue, const int &wd,
-                const int &wl, const int &symbolic_size,
+                const int &wl, const int &symbolic_size, const int &arbitrary,
                 const vector<vector<pair<double, double> > > &cum,
                 vector<vector<bool> > &indicating_array) {
     vector<bool> temp;
@@ -147,17 +147,19 @@ void indicating(const vector<vector<double> > &featrue, const int &wd,
             
             // int length = 1. * wl / wd;
             // int ly = 0, ry = length;
-            int val = 0, ly = 0, ry = 0;
+            int val = 0, ly = 0, ry = 0, rad = 1;
             for (int k = 0; k < wd; ++ k) {
                 ly = round(1. * wl / wd * k);
                 ry = round(1. * wl / wd * (k + 1));
                 double sumy = cum[i][j + ry].first - cum[i][j + ly].first;
                 double meany = sumy / (ry - ly);
                 double paa = (meany - meanx) / sigmax;
-                int bit_val = get_bitval(paa, 4);
+                int bit_val = get_bitval(paa, arbitrary);
                 // int bit_val = (paa < 0.) ? 
                 //               ( (paa < -0.67) ? 0 : 1 ) : ( (paa < 0.67) ? 2 : 3 );
-                val += (1 << (k << 1)) * bit_val;
+                // val += (1 << (k << 1)) * bit_val;
+                val += rad * bit_val;
+                rad *= arbitrary;
                 // ly = ry;
                 // ry += length;
             }
@@ -270,12 +272,13 @@ void ensemble2graph(vector<vector<int> > &subclusters, const int &label_size,
 vector<vector<int> > get_subclusters(const vector<vector<double> > &features, 
                                      const int &n, const int &ensemble_size, 
                                      const int &wd, const int &wl,
-                                     const int &symbolic_size, const int &label_size,
+                                     const int &arbitrary, const int &label_size,
                                      vector<vector<pair<double, double> > > &cum) {
     // indicating_array[i][j] indicates whether the ith time series 
     // contains the jth symbol pattern
     vector<vector<bool> > indicating_array;
-    indicating(features, wd, wl, symbolic_size, cum, indicating_array);
+    int symbolic_size = pow(arbitrary, wd);
+    indicating(features, wd, wl, symbolic_size, arbitrary, cum, indicating_array);
 
     // The upper and lower bounds of the count of symbol patterns 
     // that can be selected as features
@@ -303,7 +306,7 @@ vector<int> get_parts(vector<vector<int> > &clusters, const int &label_size,
     // nvtxs is the number of vertices in the graph (equals to xadj.size() + 1)
     // ncon is the number of balancing constraints 
     idx_t nvtxs = n + clusters.size() * label_size,
-          ncon = 1, nparts = label_size, objval = 0;
+          ncon = 2, nparts = label_size, objval = 0;
     // xadj and adjncy store the graph using the compressed storage format (CSR)
     // partvec stores the partition vector of the graph.
     vector<idx_t> xadj, adjncy, part(nvtxs, 0);
@@ -349,7 +352,7 @@ int main(int argc, char *argv[]) {
     // const int ensemble_size = atoi(argv[2]);
     //    string dataset; int ensemble_size;
     //    cin >> dataset >> ensemble_size;
-    string dataset = "FaceFour";
+    string dataset = "BeetleFly";
     int ensemble_size = 100;
     cout << "dataset: " << dataset << ", ensemble size: " << ensemble_size << endl;
     
@@ -396,13 +399,14 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < wd_list.size(); ++ i) {
         int wd = wd_list[i];
-        int symbolic_size = 1 << (wd << 1);
+        // int symbolic_size = 1 << (wd << 1);
+        // int symbolic_size = pow(4, wd);
 
         for (int j = 0; j < wl_list.size(); ++ j) {
             int wl = wl_list[j];
 
             Algorithm::subclusters = get_subclusters(Data::features, n, ensemble_size,
-                                    wd, wl, symbolic_size, label_size, Data::cum);
+                                    wd, wl, 6, label_size, Data::cum);
             if (Algorithm::subclusters.size() == 0) continue;
 
             Algorithm::partvec = get_parts(Algorithm::subclusters, label_size, n);
