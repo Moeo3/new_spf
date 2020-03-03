@@ -378,13 +378,66 @@ double rand_index(const vector<int> &predict, const vector<double> &real) {
     return 1. * (tp + tn) / (tp + tn + fp + fn);
 }
 
+void discrete(const vector<double> &labels, 
+              vector<int> &label_index, vector<int> &label_count) {
+    auto unique_labels = labels;
+    sort(unique_labels.begin(), unique_labels.end());
+    auto e = unique(unique_labels.begin(), unique_labels.end());
+    unique_labels.erase(e, unique_labels.end());
+    label_index.resize(labels.size(), 0);
+    label_count.resize(unique_labels.size(), 0);
+    for (int i = 0; i < labels.size(); ++ i) {
+        label_index[i] = lower_bound(unique_labels.begin(), e, labels[i]) - unique_labels.begin();
+        ++ label_count[label_index[i]];
+    }
+    label_count.erase(label_count.begin() + unique_labels.size(), label_count.end());
+}
+
+int combination2(int n) {
+    return n * (n - 1) / 2;
+}
+
+double get_ari(const vector<int> &predict, const vector<double> &real) {
+    vector<double> pred(predict.begin(), predict.end());
+    vector<int> li_pred, li_real, lc_pred, lc_real;
+    discrete(pred, li_pred, lc_pred);
+    discrete(real, li_real, lc_real);
+
+    int m = pred.size();
+    int n = lc_pred.size();
+    vector<vector<int> > cnt(n, vector<int>(n));
+
+    for (int i = 0; i < m; ++ i) {
+        ++ cnt[li_pred[i]][li_real[i]];
+    }
+    
+    int sum_comb_ij = 0;
+    for (int i = 0; i < n; ++ i) {
+        for (int j = 0; j < n; ++ j) {
+            if (cnt[i][j] > 1) 
+                sum_comb_ij += combination2(cnt[i][j]);
+        }
+    }
+
+    int sum_comb_i = 0, sum_comb_j = 0;
+    for (int i = 0; i < n; ++ i) {
+        if (lc_pred[i] > 1) sum_comb_i += combination2(lc_pred[i]);
+        if (lc_real[i] > 1) sum_comb_j += combination2(lc_real[i]);
+    }
+
+    double e = 1. * sum_comb_i * sum_comb_j / combination2(m);
+    double ari = (sum_comb_ij - e) / (0.5 * (sum_comb_i + sum_comb_j) - e);
+    
+    return ari;
+}
+
 
 int main(int argc, char *argv[]) {
     // string dataset = string(argv[1]);
     // const int ensemble_size = atoi(argv[2]);
     //    string dataset; int ensemble_size;
     //    cin >> dataset >> ensemble_size;
-    string dataset = "50words";
+    string dataset = "Gun_Point";
     int ensemble_size = 100;
     cout << "dataset: " << dataset << ", ensemble size: " << ensemble_size << endl;
     
@@ -467,6 +520,7 @@ int main(int argc, char *argv[]) {
     
     // Calculating the Rand Index
     double rand_idx = rand_index(partvec, Data::labels);
+    double ari = get_ari(partvec, Data::labels);
     double run_time =  (double)(end_time - start_time) / CLOCKS_PER_SEC;
 
     // for (int i = 0; i < n; ++ i) {
@@ -475,17 +529,18 @@ int main(int argc, char *argv[]) {
     // cout << endl;
 
     cout << "rand index: " << rand_idx << endl;
+    cout << "ari: " << ari << endl;
     cout << "The running time is: " << fixed << run_time << "seconds" << endl;
 
-    ofstream out_file("ress", ios::app);
-    out_file << dataset << "," << rand_idx << "," << run_time << endl;
-    // for (int i = 0; i < n; ++ i) {
-    //     for (int j = 0; j < m; ++ j) {
-    //         out_file << Data::hist[i][j] << ",";
-    //     }
-    //     out_file << endl;
-    // }
-    out_file.close();
+    // ofstream out_file("ress", ios::app);
+    // out_file << dataset << "," << rand_idx << "," << run_time << endl;
+    // // for (int i = 0; i < n; ++ i) {
+    // //     for (int j = 0; j < m; ++ j) {
+    // //         out_file << Data::hist[i][j] << ",";
+    // //     }
+    // //     out_file << endl;
+    // // }
+    // out_file.close();
     
     return 0;
 }
